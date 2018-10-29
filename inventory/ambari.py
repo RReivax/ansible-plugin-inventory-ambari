@@ -44,7 +44,7 @@ DOCUMENTATION = '''
 '''
 EXAMPLES = '''
 plugin: ambari
-host_name: ambari-server.makayel.local
+hostname: ambari-server.makayel.local
 port: 8443
 username: localuser
 password: localpass

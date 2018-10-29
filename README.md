@@ -9,12 +9,13 @@
 
 The below requirements are needed on the local master node that executes this inventory.
 
+* Ansible > 2.7.0
 * sudo pip3 install [python-ambariclient](https://github.com/jimbobhickville/python-ambariclient)
 
 ## Parameters
 
     plugin: ambari
-    host_name: ambari-server.makayel.local
+    hostname: ambari-server.makayel.local
     port: 8443
     username: localuser
     password: localpass
