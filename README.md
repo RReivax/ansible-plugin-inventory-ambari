@@ -7,7 +7,7 @@
 
 ### Requirements
 
-The below requirements are needed on the local master node that executes this inventory.
+This below requirements are needed on the local node that executes this plugin.
 
 * Ansible > 2.7.0
 * sudo pip3 install [python-ambariclient](https://github.com/jimbobhickville/python-ambariclient)
