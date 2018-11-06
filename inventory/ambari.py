@@ -109,6 +109,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         # populate hosts
         self._populate_hosts(_cluster_name, _services_name, _hosts_name)
 
+        # populate ambari server
+        self._populate_ambari()
+
     ###########################################################################
     # Engine
     ###########################################################################
@@ -166,6 +169,27 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
             for component in self._get_host_components(cluster_name, host_name):
                 self.inventory.add_host(host_name, group=component.component_name.lower())
+
+    def _populate_ambari(self):
+        '''
+            Add the Ambari Server to the inventory file
+        '''
+        _group = 'ambari_server'
+        _hostname = self.get_option('hostname')
+        ambari_config = {}
+
+        self.inventory.add_group(_group)
+        self.inventory.add_host(_hostname, group=_group)
+        ambari_config['protocol'] = self.get_option('protocol')
+        ambari_config['port'] = self.get_option('port')
+        ambari_config['username'] = self.get_option('username')
+        ambari_config['password'] = self.get_option('password')
+        ambari_config['validate_ssl'] = self.get_option('validate_ssl')
+
+        self.inventory.set_variable(_hostname, 'ambari_config', ambari_config)
+
+
+
 
     ###########################################################################
     # Apache Ambari
