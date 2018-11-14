@@ -143,14 +143,12 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             configurations = {}
 
             for service_name in services_name:
-                configurations_json = []
+                configurations_json = {}
                 for service in self._get_service_current_configuration(cluster_name, service_name)['items']:
+                    configuration_json = {}
                     for configuration in service['configurations']:
-                        configuration_json = {}
-                        configuration_json['file_name'] = configuration['type']
-                        configuration_json['properties'] = configuration['properties']
-                        configurations_json.append(configuration_json)
-
+                        configuration_json[configuration['type']] = configuration['properties']
+                    configurations_json = configuration_json
                 configurations[service_name.lower()] = configurations_json
 
             self.inventory.set_variable(host_name, 'configurations', configurations)
