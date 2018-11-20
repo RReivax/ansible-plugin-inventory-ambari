@@ -154,11 +154,10 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             self.inventory.set_variable(host_name, 'configurations', configurations)
 
             host = self._get_host(host_name)
+            self.inventory.set_variable(host_name, 'ansible_host', host_name)
             for field in host.fields:
                 if (field.startswith('host') is not True) and (field.startswith('last') is not True) and field != 'desired_configs':
                     self.inventory.set_variable(host_name, field, getattr(host, field))
-                    if field == 'ip':
-                        self.inventory.set_variable(host_name, 'ansible_host', getattr(host, field))
 
             if self.get_option('ansible_user'):
                 self.inventory.set_variable(host_name, 'ansible_user', self.get_option('ansible_user'))
