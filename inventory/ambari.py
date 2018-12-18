@@ -251,8 +251,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         '''
         hosts_name = []
         for host in self._client.clusters(cluster_name).hosts:
-            if host.host_status == 'HEALTHY':
-                hosts_name.append(host.host_name)
+            hosts_name.append(host.host_name)
         return sorted(set(hosts_name))
 
     def _get_host(self, host_name):
