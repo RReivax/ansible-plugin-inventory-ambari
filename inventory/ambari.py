@@ -112,6 +112,9 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         # populate ambari server
         self._populate_ambari(_cluster_name)
 
+        # populate localhost
+        self._populate_localhost()
+
     ###########################################################################
     # Engine
     ###########################################################################
@@ -186,6 +189,18 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         ambari_config['cluster_name'] = _cluster_name
 
         self.inventory.set_variable(_hostname, 'ambari_config', ambari_config)
+
+    def _populate_localhost(self):
+        '''
+            Add the localhost to the inventory file
+        '''
+        _group = 'local'
+        _hostname = 'localhost'
+        self.inventory.add_group(_group)
+        self.inventory.add_host(_hostname, group=_group)
+        self.inventory.set_variable(_hostname, 'ansible_host', '127.0.0.1')
+        self.inventory.set_variable(_hostname, 'ansible_connection', 'local')
+        self.inventory.set_variable(_hostname, 'ansible_become', 'false')
 
     ###########################################################################
     # Apache Ambari
