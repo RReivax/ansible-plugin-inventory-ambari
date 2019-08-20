@@ -32,3 +32,6 @@ This below requirements are needed on the local node that executes this plugin.
 ## Status
 ### Author
     Michael Hatoum <michael@adaltas.com>
+
+### Contributor
+    Xavier Hermand <xavier@adaltas.com>

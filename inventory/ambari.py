@@ -1,6 +1,16 @@
 # Copyright (c) 2018, Michael Hatoum <michael@adaltas.com>
-
 from __future__ import (absolute_import, division, print_function)
+
+import urllib3
+import json
+from requests.auth import HTTPBasicAuth
+import requests
+import ast
+import os
+from ansible.plugins.inventory import BaseInventoryPlugin, Constructable, Cacheable
+from ansible.module_utils.common._collections_compat import MutableMapping
+from ansible.module_utils._text import to_bytes, to_native, to_text
+from ansible.errors import AnsibleParserError, AnsibleError
 __metaclass__ = type
 
 DOCUMENTATION = '''
@@ -18,24 +28,18 @@ DOCUMENTATION = '''
     options:
         hostname:
             description: host name
-            required: true
         port:
             description: port
-            required: true
         username:
             description: username
-            required: true
         password:
             description: password
-            required: true
         protocol:
             description: ambari protocol
-            default: http
             choices: ['http', 'https']
         validate_ssl:
             description: validate ssl
             type: boolean
-            default: False
             choices: [False, True]
         ansible_user:
             description: ssh username
@@ -54,22 +58,13 @@ ansible_user: nodesuser
 ansible_ssh_pass: nodespass
 '''
 
-from ansible.errors import AnsibleParserError, AnsibleError
-from ansible.module_utils._text import to_bytes, to_native, to_text
-from ansible.module_utils.common._collections_compat import MutableMapping
-from ansible.plugins.inventory import BaseInventoryPlugin, Constructable, Cacheable
-
-import os
-import ast
-import requests
-from requests.auth import HTTPBasicAuth
-import json
-import urllib3
 
 try:
     from ambariclient.client import Ambari
 except ImportError:
-    raise AnsibleError('The Apache Ambari dynamic inventory plugin requires python-ambariclient (pip3 install python-ambariclient).')
+    raise AnsibleError(
+        'The Apache Ambari dynamic inventory plugin requires python-ambariclient (pip3 install python-ambariclient).')
+
 
 class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
     NAME = 'ambari'
@@ -91,6 +86,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         # update any options declared in DOCUMENTATION as needed
         config_data = self._read_config_data(path)
 
+        self._parse_config()
         # initialize Apache Ambari client
         self._initialize_client()
 
@@ -115,6 +111,60 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         # populate localhost
         self._populate_localhost()
 
+    def _set_config(self, key, env_key, option_key, default):
+        '''
+        Set key of `config` dict.
+        Priority: environment variable, file variable, default value.
+        '''
+        try:
+            self.config[key] = os.environ[env_key]
+        except KeyError:
+            self.config[key] = self.get_option(option_key) or default
+
+    def _parse_config(self):
+        '''Set configuration based on file or environment variables'''
+        self.config = {}
+
+        self._set_config('hostname',                   # self.config key
+                         'AMBARI_HOSTNAME',            # os env key
+                         'hostname',                   # file option key
+                         'ambari-host.local')          # default value
+
+        self._set_config('port',
+                         'AMBARI_PORT',
+                         'port',
+                         8443)
+
+        self._set_config('username',
+                         'AMBARI_USERNAME',
+                         'username',
+                         'admin')
+
+        self._set_config('password',
+                         'AMBARI_PASSWORD',
+                         'password',
+                         'admin')
+
+        self._set_config('protocol',
+                         'AMBARI_PROTOCOL',
+                         'protocol',
+                         'http')
+
+        self._set_config('validate_ssl',
+                         'AMBARI_VALIDATE_SSL',
+                         'validate_ssl',
+                         False)
+
+        self._set_config('ansible_user',
+                         'ANSIBLE_USER',
+                         'ansible_user',
+                         None)
+
+        self._set_config('ansible_ssh_pass',
+                         'ANSIBLE_SSH_PASS',
+                         'ansible_ssh_pass',
+                         None)
+
     ###########################################################################
     # Engine
     ###########################################################################
@@ -131,7 +181,8 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             for component_name in self._get_components_name(cluster_name, service_name):
                 self.inventory.add_group(component_name.lower())
                 if service_name.lower() != component_name.lower():
-                    self.inventory.add_child(service_name.lower(), component_name.lower())
+                    self.inventory.add_child(
+                        service_name.lower(), component_name.lower())
 
     def _populate_hosts(self, cluster_name, services_name, hosts_name):
         '''
@@ -150,25 +201,33 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
                 for service in self._get_service_current_configuration(cluster_name, service_name)['items']:
                     configuration_json = {}
                     for configuration in service['configurations']:
-                        configuration_json[configuration['type']] = configuration['properties']
+                        configuration_json[configuration['type']
+                                           ] = configuration['properties']
                     configurations_json = configuration_json
                 configurations[service_name.lower()] = configurations_json
 
-            self.inventory.set_variable(host_name, 'configurations', configurations)
+            self.inventory.set_variable(
+                host_name, 'configurations', configurations)
 
             host = self._get_host(host_name)
             self.inventory.set_variable(host_name, 'ansible_host', host_name)
             for field in host.fields:
                 if (field.startswith('host') is not True) and (field.startswith('last') is not True) and field != 'desired_configs':
-                    self.inventory.set_variable(host_name, field, getattr(host, field))
+                    self.inventory.set_variable(
+                        host_name, field, getattr(host, field))
 
-            if self.get_option('ansible_user'):
-                self.inventory.set_variable(host_name, 'ansible_user', self.get_option('ansible_user'))
-            if self.get_option('ansible_ssh_pass'):
-                self.inventory.set_variable(host_name, 'ansible_ssh_pass', self.get_option('ansible_ssh_pass'))
+            if self.config.get('ansible_user'):
+                self.inventory.set_variable(
+                    host_name, 'ansible_user', self.config.get('ansible_user'))
+            if self.config.get('ansible_ssh_pass'):
+                self.inventory.set_variable(
+                    host_name, 'ansible_ssh_pass', self.config.get('ansible_ssh_pass'))
 
             for component in self._get_host_components(cluster_name, host_name):
-                self.inventory.add_host(host_name, group=component.component_name.lower())
+                self.inventory.add_host(
+                    host_name,
+                    group=component.component_name.lower(),
+                    variables={'toto': 'tata'})
 
     def _populate_ambari(self, _cluster_name):
         '''
@@ -176,16 +235,16 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             :param cluster_name: name of the cluster
         '''
         _group = 'ambari_server'
-        _hostname = self.get_option('hostname')
+        _hostname = self.config.get('hostname')
         ambari_config = {}
 
         self.inventory.add_group(_group)
         self.inventory.add_host(_hostname, group=_group)
-        ambari_config['protocol'] = self.get_option('protocol')
-        ambari_config['port'] = self.get_option('port')
-        ambari_config['username'] = self.get_option('username')
-        ambari_config['password'] = self.get_option('password')
-        ambari_config['validate_ssl'] = self.get_option('validate_ssl')
+        ambari_config['protocol'] = self.config.get('protocol')
+        ambari_config['port'] = self.config.get('port')
+        ambari_config['username'] = self.config.get('username')
+        ambari_config['password'] = self.config.get('password')
+        ambari_config['validate_ssl'] = self.config.get('validate_ssl')
         ambari_config['cluster_name'] = _cluster_name
 
         self.inventory.set_variable(_hostname, 'ambari_config', ambari_config)
@@ -210,25 +269,18 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
         '''
             Initialize Apache Ambari client
         '''
-        # check not required arguments
-        protocol = 'http'
-        if self.get_option('protocol'):
-            if self.get_option('protocol') == 'https':
-                protocol = self.get_option('protocol')
-
-        validate_ssl = False
-        if self.get_option('validate_ssl'):
-            if self.get_option('validate_ssl') == True:
-                validate_ssl = self.get_option('validate_ssl')
 
         # disable ssl warning
-        if validate_ssl == False:
+        if self.config.get('validate_ssl') == False:
             urllib3.disable_warnings()
 
         # initiate Apache Ambari client
-        self._client = Ambari(self.get_option('hostname'), port=int(self.get_option('port')),
-            username=self.get_option('username'), password=self.get_option('password'),
-            protocol=protocol, validate_ssl=validate_ssl)
+        self._client = Ambari(self.config.get('hostname'),
+                              port=int(self.config.get('port')),
+                              username=self.config.get('username'),
+                              password=self.config.get('password'),
+                              protocol=self.config.get('protocol'),
+                              validate_ssl=self.config.get('validate_ssl'))
 
     def _get_cluster_name(self):
         '''
@@ -290,13 +342,17 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             :param service_name: name of the service
         '''
         protocol = 'http'
-        if self.get_option('protocol'):
-            if self.get_option('protocol') == 'https':
-                protocol = self.get_option('protocol')
+        if self.config.get('protocol'):
+            if self.config.get('protocol') == 'https':
+                protocol = self.config.get('protocol')
 
-        url = protocol + '://' + self.get_option('hostname') + ':' + str(self.get_option('port')) + '/api/v1/clusters/' + cluster_name + '/configurations/service_config_versions?service_name.in(' + service_name + ')&is_current=true'
+        url = protocol + '://' + self.config.get('hostname') + ':' + str(self.config.get('port')) + '/api/v1/clusters/' + \
+            cluster_name + \
+            '/configurations/service_config_versions?service_name.in(' + \
+            service_name + ')&is_current=true'
         headers = {'X-Requested-By': 'ambari'}
-        response = requests.get(url, headers=headers, auth=HTTPBasicAuth(self.get_option('username'), self.get_option('password')), verify=False)
+        response = requests.get(url, headers=headers, auth=HTTPBasicAuth(
+            self.config.get('username'), self.config.get('password')), verify=False)
 
         if response.ok:
             return response.json()
